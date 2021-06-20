@@ -1,7 +1,7 @@
 /**
  * @Author: peer
  * @Date: 2021-05-13 23:21:47
- * @LastEditTime: 2021-05-18 23:41:35
+ * @LastEditTime: 2021-06-21 00:59:57
  * @Description: file content
  */
 package main
@@ -16,6 +16,7 @@ import (
 )
 
 type Task struct {
+	ID      uint64
 	Handler func(v ...interface{}) interface{}
 	Params  []interface{}
 }
@@ -63,11 +64,10 @@ func (p *Pool) run() {
 		}()
 		for {
 			select {
-			case task, ok := <-p.chTask:
-				if !ok {
-					return
-				}
+			case task := <-p.chTask:
 				task.Handler(task.Params...)
+			default:
+				return
 			}
 		}
 	}()
@@ -107,19 +107,18 @@ func (p *Pool) Put(task *Task) error {
 	if p.status == STOPED {
 		return ErrPoolAlreadyClosed
 	}
+	// p.incUnFinishTask(1)
 	if p.GetRunningWorkers() < p.GetCap() {
 		p.run()
 	}
 	if p.status == RUNNING {
 		p.chTask <- task
+		fmt.Println("id", task.ID)
 	}
 	return nil
 }
 
 func (p *Pool) Close() {
-	// if !p.setStatus(STOPED) {
-	// 	return
-	// }
 	p.setStatus(STOPED)
 	for len(p.chTask) > 0 {
 		time.Sleep(1e6)
@@ -142,14 +141,19 @@ func main() {
 	}
 
 	for i := 0; i < 20; i++ {
-		pool.Put(&Task{
+		_ = pool.Put(&Task{
+			ID: uint64(i),
 			Handler: func(v ...interface{}) interface{} {
 				fmt.Println(v)
+				time.Sleep(2 * time.Second)
+
 				return v
 			},
 			Params: []interface{}{i},
 		})
 	}
 
-	time.Sleep(1e9)
+	for pool.GetRunningWorkers() != 0 {
+
+	}
 }
